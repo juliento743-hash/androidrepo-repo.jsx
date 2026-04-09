@@ -1,0 +1,393 @@
+import java.io.File
+import java.awt.*
+import java.awt.event.*
+import javax.swing.*
+import javax.swing.filechooser.FileNameExtensionFilter
+import javax.sound.sampled.*
+import java.util.*
+
+class MusicPlayer : JFrame() {
+    private val playlist = mutableListOf<File>()
+    private var currentSongIndex = -1
+    private var clip: Clip? = null
+    private var currentPosition = 0
+    private var isPlaying = false
+    
+    // Componentes de la UI
+    private val playlistModel = DefaultListModel<String>()
+    private val playlistList = JList(playlistModel)
+    private val songTitleLabel = JLabel("No hay canción seleccionada", SwingConstants.CENTER)
+    private val timeLabel = JLabel("00:00 / 00:00")
+    private val progressBar = JProgressBar(0, 100)
+    private val volumeSlider = JSlider(0, 100, 70)
+    private val playButton = JButton("▶")
+    private val pauseButton = JButton("⏸")
+    private val stopButton = JButton("⏹")
+    private val previousButton = JButton("⏮")
+    private val nextButton = JButton("⏭")
+    
+    private var timer: Timer? = null
+    
+    init {
+        setupUI()
+        setupListeners()
+        setupVolumeControl()
+    }
+    
+    private fun setupUI() {
+        title = "🎵 Reproductor de Música"
+        defaultCloseOperation = EXIT_ON_CLOSE
+        setSize(800, 600)
+        setLocationRelativeTo(null)
+        layout = BorderLayout(10, 10)
+        
+        // Panel superior - Controles principales
+        val topPanel = JPanel(BorderLayout())
+        topPanel.border = BorderFactory.createEmptyBorder(10, 10, 10, 10)
+        
+        // Título de la canción
+        songTitleLabel.font = Font("Arial", Font.BOLD, 16)
+        topPanel.add(songTitleLabel, BorderLayout.NORTH)
+        
+        // Barra de progreso y tiempo
+        val progressPanel = JPanel(BorderLayout())
+        progressBar.isIndeterminate = false
+        progressPanel.add(progressBar, BorderLayout.CENTER)
+        progressPanel.add(timeLabel, BorderLayout.EAST)
+        topPanel.add(progressPanel, BorderLayout.CENTER)
+        
+        // Botones de control
+        val controlsPanel = JPanel(FlowLayout())
+        controlsPanel.add(previousButton)
+        controlsPanel.add(playButton)
+        controlsPanel.add(pauseButton)
+        controlsPanel.add(stopButton)
+        controlsPanel.add(nextButton)
+        topPanel.add(controlsPanel, BorderLayout.SOUTH)
+        
+        add(topPanel, BorderLayout.NORTH)
+        
+        // Panel central - Lista de reproducción
+        val centerPanel = JPanel(BorderLayout())
+        centerPanel.border = BorderFactory.createTitledBorder("📋 Tu Biblioteca Musical")
+        
+        val scrollPane = JScrollPane(playlistList)
+        centerPanel.add(scrollPane, BorderLayout.CENTER)
+        
+        // Botones para gestionar playlist
+        val playlistButtonsPanel = JPanel(FlowLayout())
+        val addButton = JButton("➕ Agregar Canciones")
+        val removeButton = JButton("❌ Eliminar Seleccionada")
+        val clearButton = JButton("🗑 Limpiar Playlist")
+        
+        playlistButtonsPanel.add(addButton)
+        playlistButtonsPanel.add(removeButton)
+        playlistButtonsPanel.add(clearButton)
+        centerPanel.add(playlistButtonsPanel, BorderLayout.SOUTH)
+        
+        add(centerPanel, BorderLayout.CENTER)
+        
+        // Panel inferior - Controles adicionales
+        val bottomPanel = JPanel(BorderLayout())
+        bottomPanel.border = BorderFactory.createEmptyBorder(10, 10, 10, 10)
+        
+        // Control de volumen
+        val volumePanel = JPanel(FlowLayout(FlowLayout.LEFT))
+        volumePanel.add(JLabel("🔊 Volumen:"))
+        volumeSlider.preferredSize = Dimension(150, 30)
+        volumePanel.add(volumeSlider)
+        bottomPanel.add(volumePanel, BorderLayout.WEST)
+        
+        // Información de estado
+        val statusLabel = JLabel("Listo para reproducir | Formatos soportados: MP3, WAV, AU, AIFF")
+        statusLabel.font = Font("Arial", Font.ITALIC, 10)
+        bottomPanel.add(statusLabel, BorderLayout.CENTER)
+        
+        add(bottomPanel, BorderLayout.SOUTH)
+        
+        // Configurar botones
+        pauseButton.isEnabled = false
+        stopButton.isEnabled = false
+        
+        // Eventos de botones de playlist
+        addButton.addActionListener { addSongs() }
+        removeButton.addActionListener { removeSelectedSong() }
+        clearButton.addActionListener { clearPlaylist() }
+        
+        // Doble clic para reproducir
+        playlistList.addMouseListener(object : MouseAdapter() {
+            override fun mouseClicked(e: MouseEvent) {
+                if (e.clickCount == 2) {
+                    playSelectedSong()
+                }
+            }
+        })
+    }
+    
+    private fun setupListeners() {
+        playButton.addActionListener {
+            if (currentSongIndex == -1 && playlist.isNotEmpty()) {
+                currentSongIndex = 0
+                playCurrentSong()
+            } else if (!isPlaying && clip != null) {
+                resumePlayback()
+            } else if (currentSongIndex != -1) {
+                playCurrentSong()
+            }
+        }
+        
+        pauseButton.addActionListener {
+            pausePlayback()
+        }
+        
+        stopButton.addActionListener {
+            stopPlayback()
+        }
+        
+        previousButton.addActionListener {
+            previousSong()
+        }
+        
+        nextButton.addActionListener {
+            nextSong()
+        }
+    }
+    
+    private fun setupVolumeControl() {
+        volumeSlider.addChangeListener {
+            if (clip != null) {
+                val volume = volumeSlider.value / 100.0f
+                val gainControl = clip!!.getControl(FloatControl.Type.MASTER_GAIN)
+                val min = gainControl.minimum
+                val max = gainControl.maximum
+                val gain = min + (max - min) * volume
+                gainControl.value = gain
+            }
+        }
+    }
+    
+    private fun addSongs() {
+        val fileChooser = JFileChooser()
+        fileChooser.isMultiSelectionEnabled = true
+        fileChooser.fileFilter = FileNameExtensionFilter(
+            "Archivos de audio", "mp3", "wav", "au", "aiff"
+        )
+        
+        if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+            val files = fileChooser.selectedFiles
+            for (file in files) {
+                if (!playlist.contains(file)) {
+                    playlist.add(file)
+                    playlistModel.addElement("${file.nameWithoutExtension} (${formatFileSize(file.length())})")
+                }
+            }
+            if (currentSongIndex == -1 && playlist.isNotEmpty()) {
+                currentSongIndex = 0
+                updateSongTitle()
+            }
+        }
+    }
+    
+    private fun removeSelectedSong() {
+        val selectedIndex = playlistList.selectedIndex
+        if (selectedIndex != -1) {
+            if (selectedIndex == currentSongIndex) {
+                stopPlayback()
+            }
+            playlist.removeAt(selectedIndex)
+            playlistModel.remove(selectedIndex)
+            
+            if (currentSongIndex > selectedIndex) {
+                currentSongIndex--
+            } else if (currentSongIndex == selectedIndex) {
+                currentSongIndex = -1
+                songTitleLabel.text = "No hay canción seleccionada"
+                timeLabel.text = "00:00 / 00:00"
+                progressBar.value = 0
+            }
+            
+            updateButtonsState()
+        }
+    }
+    
+    private fun clearPlaylist() {
+        stopPlayback()
+        playlist.clear()
+        playlistModel.clear()
+        currentSongIndex = -1
+        songTitleLabel.text = "No hay canción seleccionada"
+        timeLabel.text = "00:00 / 00:00"
+        progressBar.value = 0
+        updateButtonsState()
+    }
+    
+    private fun playSelectedSong() {
+        val selectedIndex = playlistList.selectedIndex
+        if (selectedIndex != -1 && selectedIndex < playlist.size) {
+            currentSongIndex = selectedIndex
+            playCurrentSong()
+        }
+    }
+    
+    private fun playCurrentSong() {
+        try {
+            stopPlayback()
+            
+            val audioFile = playlist[currentSongIndex]
+            val audioStream = AudioSystem.getAudioInputStream(audioFile)
+            val format = audioStream.format
+            val info = DataLine.Info(Clip::class.java, format)
+            
+            clip = AudioSystem.getLine(info) as Clip
+            clip!!.open(audioStream)
+            
+            // Configurar volumen
+            if (clip!!.isControlSupported(FloatControl.Type.MASTER_GAIN)) {
+                val gainControl = clip!!.getControl(FloatControl.Type.MASTER_GAIN)
+                val volume = volumeSlider.value / 100.0f
+                val min = gainControl.minimum
+                val max = gainControl.maximum
+                gainControl.value = min + (max - min) * volume
+            }
+            
+            clip!!.start()
+            isPlaying = true
+            
+            // Iniciar timer para actualizar barra de progreso
+            startProgressTimer()
+            
+            updateSongTitle()
+            updateButtonsState()
+            
+            // Listener para cuando termina la canción
+            clip!!.addLineListener { event ->
+                if (event.type == LineEvent.Type.STOP && clip!!.framePosition == clip!!.frameLength) {
+                    SwingUtilities.invokeLater {
+                        nextSong()
+                    }
+                }
+            }
+            
+        } catch (e: Exception) {
+            JOptionPane.showMessageDialog(
+                this,
+                "Error al reproducir: ${e.message}\nAsegúrate de que el archivo sea compatible",
+                "Error de reproducción",
+                JOptionPane.ERROR_MESSAGE
+            )
+        }
+    }
+    
+    private fun pausePlayback() {
+        if (clip != null && isPlaying) {
+            currentPosition = clip!!.framePosition
+            clip!!.stop()
+            isPlaying = false
+            stopProgressTimer()
+            updateButtonsState()
+        }
+    }
+    
+    private fun resumePlayback() {
+        if (clip != null && !isPlaying) {
+            clip!!.framePosition = currentPosition
+            clip!!.start()
+            isPlaying = true
+            startProgressTimer()
+            updateButtonsState()
+        }
+    }
+    
+    private fun stopPlayback() {
+        if (clip != null) {
+            clip!!.stop()
+            clip!!.close()
+            clip = null
+            isPlaying = false
+            currentPosition = 0
+            stopProgressTimer()
+            progressBar.value = 0
+            timeLabel.text = "00:00 / ${getFormattedDuration(0)}"
+            updateButtonsState()
+        }
+    }
+    
+    private fun previousSong() {
+        if (playlist.isNotEmpty()) {
+            currentSongIndex = if (currentSongIndex > 0) currentSongIndex - 1 else playlist.size - 1
+            playCurrentSong()
+        }
+    }
+    
+    private fun nextSong() {
+        if (playlist.isNotEmpty()) {
+            currentSongIndex = if (currentSongIndex < playlist.size - 1) currentSongIndex + 1 else 0
+            playCurrentSong()
+        }
+    }
+    
+    private fun updateSongTitle() {
+        if (currentSongIndex != -1 && currentSongIndex < playlist.size) {
+            val songName = playlist[currentSongIndex].nameWithoutExtension
+            songTitleLabel.text = "🎵 $songName"
+        }
+    }
+    
+    private fun updateButtonsState() {
+        playButton.isEnabled = playlist.isNotEmpty() && (!isPlaying || clip == null)
+        pauseButton.isEnabled = isPlaying && clip != null
+        stopButton.isEnabled = clip != null
+        previousButton.isEnabled = playlist.isNotEmpty()
+        nextButton.isEnabled = playlist.isNotEmpty()
+    }
+    
+    private fun startProgressTimer() {
+        stopProgressTimer()
+        timer = Timer(100) {
+            if (clip != null && isPlaying) {
+                val current = clip!!.framePosition / clip!!.format.frameRate.toInt()
+                val total = clip!!.frameLength / clip!!.format.frameRate.toInt()
+                val progress = (clip!!.framePosition.toFloat() / clip!!.frameLength * 100).toInt()
+                
+                progressBar.value = progress
+                timeLabel.text = "${formatTime(current)} / ${formatTime(total)}"
+            }
+        }
+        timer!!.start()
+    }
+    
+    private fun stopProgressTimer() {
+        timer?.stop()
+        timer = null
+    }
+    
+    private fun formatTime(seconds: Int): String {
+        val minutes = seconds / 60
+        val secs = seconds % 60
+        return String.format("%02d:%02d", minutes, secs)
+    }
+    
+    private fun getFormattedDuration(totalSeconds: Int): String {
+        return formatTime(totalSeconds)
+    }
+    
+    private fun formatFileSize(bytes: Long): String {
+        return when {
+            bytes < 1024 -> "$bytes B"
+            bytes < 1024 * 1024 -> "${bytes / 1024} KB"
+            bytes < 1024 * 1024 * 1024 -> "${bytes / (1024 * 1024)} MB"
+            else -> "${bytes / (1024 * 1024 * 1024)} GB"
+        }
+    }
+}
+
+fun main() {
+    SwingUtilities.invokeLater {
+        MusicPlayer().isVisible = true
+        
+    }# Compilar
+kotlinc MusicPlayer.kt -include-runtime -d MusicPlayer.jar
+
+# Ejecutar
+java -jar MusicPlayer.jar
+}
