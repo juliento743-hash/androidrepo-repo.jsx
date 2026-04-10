@@ -1,0 +1,157 @@
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+
+// ----------------------------------------------------------------------
+// 1. SIMULADOR DE ENTORNO GeOS
+// ----------------------------------------------------------------------
+@Serializable
+data class GeOSState(
+    val installedPackages: MutableList<String> = mutableListOf(),
+    val variables: MutableMap<String, String> = mutableMapOf(),
+    val logs: MutableList<String> = mutableListOf()
+)
+
+class GeOSEnvironment {
+    private val state = GeOSState()
+
+    fun log(message: String) {
+        state.logs.add("[LOG] $message")
+        println("📝 $message")
+    }
+
+    fun install(packageName: String) {
+        if (!state.installedPackages.contains(packageName)) {
+            state.installedPackages.add(packageName)
+            log("Instalado: $packageName")
+        } else {
+            log("Ya estaba instalado: $packageName")
+        }
+    }
+
+    fun search(query: String): String {
+        log("Buscando: '$query' en fuentes internas...")
+        return "Resultado_de_busqueda_para_${query.replace(" ", "_")}"
+    }
+
+    fun run(command: String) {
+        log("Ejecutando inmediatamente: $command")
+    }
+
+    fun execute(command: String) {
+        log("Ejecución bajo demanda registrada: $command")
+    }
+
+    fun show(message: String) {
+        println("🖥️  $message")
+    }
+
+    fun getState(): GeOSState = state
+}
+
+// ----------------------------------------------------------------------
+// 2. INTÉRPRETE ASME
+// ----------------------------------------------------------------------
+class ASMEInterpreter(private val env: GeOSEnvironment) {
+
+    fun parseAndExecute(code: String) {
+        val lines = code.lines()
+            .map { it.trim() }
+            .filter { it.isNotBlank() && !it.startsWith("//") }
+
+        var idx = 0
+        while (idx < lines.size) {
+            val line = lines[idx]
+            when {
+                line.startsWith("@install") -> {
+                    val pkg = line.substringAfter("@install").trim()
+                    env.install(pkg)
+                }
+                line.startsWith("@search") -> {
+                    val query = line.substringAfter("@search").trim()
+                    env.search(query)
+                }
+                line.startsWith("@import") -> {
+                    val target = line.substringAfter("@import").trim()
+                    env.log("Importando: $target")
+                }
+                line.startsWith("run:") -> {
+                    val cmd = line.substringAfter("run:").trim()
+                    env.run(cmd)
+                }
+                line.startsWith("execute:") -> {
+                    val cmd = line.substringAfter("execute:").trim()
+                    env.execute(cmd)
+                }
+                line.startsWith("show=") -> {
+                    val msg = line.substringAfter("show=").trim()
+                    env.show(msg)
+                }
+                line.startsWith("create list") -> {
+                    env.log("Creando lista: $line")
+                }
+                line.startsWith("when chose") -> {
+                    env.log("Configuración de evento: $line")
+                }
+                // Ignorar llaves y otros delimitadores para la demo
+                line.startsWith("{") || line.startsWith("}") || line.startsWith("{/") -> {}
+                else -> {
+                    // Comando no reconocido, se omite
+                }
+            }
+            idx++
+        }
+    }
+}
+
+// ----------------------------------------------------------------------
+// 3. CÓDIGO DE EJEMPLO
+// ----------------------------------------------------------------------
+const val ASME_CODE = """
+// Configuración .confg de GeOSPc
+1 {
+    show="Idioma y región"
+    create list "País" and create list "Idioma"
+    @search "All country and All language" and create lists
+    when chose = btn_continue = turn_to_blue
+}
+
+2 {
+    show="Versión"
+    create list with:
+    - GeOSPc 11 Home
+    - GeOSPc 11 Pro
+    when chose "version" = btn-continue = turn blue
+}
+
+3 {
+    show="Instalación"
+    run: comprobación de requisitos
+    execute: copiar archivos temporales
+    show="Instalación completada"
+}
+"""
+
+// ----------------------------------------------------------------------
+// 4. EJECUCIÓN PRINCIPAL
+// ----------------------------------------------------------------------
+fun main() {
+    println("=".repeat(50))
+    println("🚀 INTÉRPRETE ASME (Kotlin)")
+    println("=".repeat(50))
+
+    val env = GeOSEnvironment()
+    val interpreter = ASMEInterpreter(env)
+
+    println("\n📜 Código ASME a ejecutar:\n")
+    println(ASME_CODE)
+    println("\n" + "=".repeat(50))
+    println("🔄 Ejecutando...\n")
+
+    interpreter.parseAndExecute(ASME_CODE)
+
+    println("\n" + "=".repeat(50))
+    println("✅ EJECUCIÓN COMPLETADA")
+    val json = Json { prettyPrint = true }
+    println(json.encodeToString(env.getState()))
+}
