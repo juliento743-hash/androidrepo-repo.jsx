@@ -99,3 +99,15 @@ if name == ‘main’:# Run with: python3 server.pyapp.run(host=‘127.0.0.1’,
 fun writeAllFiles() {val files = mapOf(“SpotiffClient.swift” to SWIFT_CODE,“index.html” to WEB_CODE,“audio_processor.cpp” to CPP_CODE,“Recommender.cs” to CSHARP_CODE,“client.py” to PYTHON_CODE,“server.py” to FLASK_CODE)for ((name, content) in files) {File(name).writeText(content)println(“Wrote $name”)}// Provide small READMEFile(“README_SPOTIFF.txt”).writeText(readmeText())println(“Wrote README_SPOTIFF.txt”)}
 
 fun readmeText(): String {return “””Spotiff multi-language starter=============================Files generated:- server.py      : Flask server (requires flask, flask-cors)- client.py      : Python client (requires requests)- index.html     : Web client (uses /songs and /stream/)- SpotiffClient.swift : Minimal Swift snippet for iOS- audio_processor.cpp : C++ audio stub- Recommender.cs : C# recommender stub
+Quick start:
+  1) Place sample mp3 files at ./audio/sample1.mp3, sample2.mp3, sample3.mp3
+  2) Run the Flask server: python3 server.py
+  3) Open index.html in browser and click 'Cargar canciones' (note CORS; filesystem may block streaming - host via simple HTTP server)
+  4) Run Kotlin client (this program) to extract files (menu option 6) and to test local playback simulation.
+
+Notes:
+  - This is a demo/starter. It avoids copyrighted streaming.
+  - For a production app you need proper authentication, storage, CDN, licensing, and streaming infrastructure.
+""".trimIndent()
+}
+/files/
