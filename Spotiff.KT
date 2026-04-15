@@ -1,4 +1,4 @@
-// File: Spotiff.KT// Single-file package that contains://  - A Kotlin console “client” (primary, ~70% of this file) that simulates the Spotiff app.//  - Embedded source for Swift, HTML/JS/CSS, C++, C#, Python and a Python Flask server.//  - A function to write the embedded sources to separate files so you can run them independently.// Usage://  - Compile/run this Kotlin file with kotlinc/jvm or run in IntelliJ.//  - From the menu choose option 6 to extract all files to the current directory.// Note: This project uses local sample audio files (place them under ./audio/). No DRM or copyrighted content included.
+ñ// File: Spotiff.KT// Single-file package that contains://  - A Kotlin console “client” (primary, ~70% of this file) that simulates the Spotiff app.//  - Embedded source for Swift, HTML/JS/CSS, C++, C#, Python and a Python Flask server.//  - A function to write the embedded sources to separate files so you can run them independently.// Usage://  - Compile/run this Kotlin file with kotlinc/jvm or run in IntelliJ.//  - From the menu choose option 6 to extract all files to the current directory.// Note: This project uses local sample audio files (place them under ./audio/). No DRM or copyrighted content included.
 
 // ————————— KOTLIN MAIN (≈69.8% of content) —————————
 
@@ -55,3 +55,10 @@ int main(int argc, char** argv) {if (argc < 2) {std::cerr << “Usage: audio_pro
 // C# (≈5% of file) - minimal recommendation microservice stubval CSHARP_CODE = “””// File: Recommender.cs// Minimal .NET Core console app stub that would become a microservice for recommendations.// This is intentionally simple and synchronous for demonstration.using System;using System.Collections.Generic;
 
 class Recommender {static List Recommend(int songId) {// Stub: return three recommended track titlesreturn new List { “Rec A”, “Rec B”, “Rec C” };}
+static void Main(string[] args) {
+    Console.WriteLine("Recommender stub running.");
+    int id = args.Length > 0 ? int.Parse(args[0]) : 1;
+    var recs = Recommend(id);
+    Console.WriteLine($"Recommendations for {id}:");
+    recs.ForEach(r => Console.WriteLine(" - " + r));
+}
